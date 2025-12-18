@@ -6,12 +6,11 @@ dependencies = [
     "jax[cuda12]>=0.8.2",
     "warp-lang>=1.10.1",
     "playground[all]>=0.0.5",
+    "twmr",
 ]
 
 [tool.uv.workspace]
-members = [
-    "packages/twmr",
-]
+members = [ "packages/twmr" ]
 
 [[tool.uv.index]]
 name = "mujoco"
@@ -27,3 +26,4 @@ explicit = true
 mujoco = { index = "mujoco" }
 warp-lang = { index = "nvidia" }
 mujoco-mjx = { git = "https://github.com/google-deepmind/mujoco", rev = "main", subdirectory = "mjx" }
+twmr = { workspace = true }
