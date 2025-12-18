@@ -50,3 +50,31 @@ git push -u origin feat/SHORT-DESCRIPTIVE-NAME
 # Continue working on the feature branch until ready to merge
 # Open a Pull Request (PR) on GitHub targeting main and then send a message to have it reviewed
 ```
+
+## Project Setup
+
+### Initial Setup
+
+You shouldn't have to do any of this if you clone the repository. These are notes for the from-scratch setup.
+
+```bash
+# These commands only need to be run once to setup the project
+
+# Assuming the directory was already created or cloned
+cd Transformable-Leg-Wheel-Robot
+pixi init .
+pixi add uv
+
+# Create a virtual environment with Python 3.11 and create the twmr package
+# This will create a uv workspace and virtual environment
+pixi run uv init --python 3.11 --bare
+pixi run uv init --package packages/twmr
+
+# Install playground dependencies and then playground
+# First grab tool.uv.indexs and tool.uv.sources from mujoco_playground
+pixi run uv add "jax[cuda12]" # test: .venv/bin/python -c "import jax; print(jax.default_backend())" --> gpu
+pixi run uv add warp-lang
+pixi run uv add "playground[all]" # test: .venv/bin/python -c "import mujoco_playground" --> no warnings
+```
+
+### Setup From Clone
