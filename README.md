@@ -90,10 +90,23 @@ pixi run uv pip install "git+https://github.com/google-deepmind/mujoco_playgroun
 ### Setup From Clone
 
 ```bash
-# Assuming you've cloned the repository
+# Initial setup process on the OnDemand sever
+
+# 1. Install pixi
+curl -fsSL https://pixi.sh/install.sh | sh
+
+# 2. Install and authenticate gh (you might need to create an authentication token)
+pixi global install gh
+gh auth login
+
+# 3. Clone the repository
+gh repo clone JacobBau04/Transformable-Leg-Wheel-Robot
+
+# 4. Setup the project
+cd Transformable-Leg-Wheel-Robot
 pixi run uv sync
 source .venv/bin/activate
-python -c "import mujoco_playground"
+python -m ipykernel install --name mp --display-name "MuJoCo Playground" --user
 
 # Now you're ready to go!
 ```
