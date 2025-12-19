@@ -79,9 +79,12 @@ pixi run uv init --package packages/twmr
 
 # Install playground dependencies and then playground
 # First grab tool.uv.indexs and tool.uv.sources from mujoco_playground
-pixi run uv add "jax[cuda12]" # test: .venv/bin/python -c "import jax; print(jax.default_backend())" --> gpu
+pixi run uv add "jax[cuda12]"
+# test: .venv/bin/python -c "import jax; print(jax.default_backend())" --> gpu
 pixi run uv add warp-lang
-pixi run uv add "playground[all]" # test: .venv/bin/python -c "import mujoco_playground" --> no warnings
+pixi run uv pip install "git+https://github.com/google-deepmind/mujoco_playground.git"
+# test: .venv/bin/python -c "import mujoco_playground" --> no warnings
+# Now manually add to the pyproject.toml file
 ```
 
 ### Setup From Clone

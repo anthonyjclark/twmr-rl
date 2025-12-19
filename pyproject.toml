@@ -5,6 +5,7 @@ requires-python = ">=3.11"
 dependencies = [
     "jax[cuda12]>=0.8.2",
     "warp-lang>=1.10.1",
+    "playground@git+https://github.com/google-deepmind/mujoco_playground.git#egg=1bd244fa9c51fa7074c7a449934f556d898f7a15",
     "twmr",
 ]
 
