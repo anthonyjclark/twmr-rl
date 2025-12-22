@@ -1,7 +1,7 @@
 
 """
 
-train_transform_flat_PPO.py
+
 
 PPO training for transformable leg-wheel robot on a flat plane,
 with trans_wheel_robo2_0.xml:
@@ -10,7 +10,7 @@ with trans_wheel_robo2_0.xml:
       *4 leg0 extension torque motors
   - coupling leg1 and leg2 to leg0
 
-edit
+
 Reward:
   forward_reward = vx
   ctrl_cost = 0.0005 * sum(action^2)
@@ -18,7 +18,7 @@ Reward:
   finishes using a fixed horizon
 
 
-23 seconds per minibatch
+23-31 seconds per minibatch / PPO update
 
 """
 
@@ -103,18 +103,31 @@ LEG0_JOINTS: List[str] = [
     "rear_right_wheel_0_extension_joint",
 ]
 
+from pathlib import Path
 
-def _resolve_xml_path(preferred: str) -> str:
+def _resolve_xml_path(xml_path: str) -> str:
+    p = Path(xml_path)
+
+    # If the user provided an absolute path or a valid relative path from cwd, accept it.
+    if p.is_file():
+        return str(p.resolve())
+
+    # Otherwise, look relative to THIS python file's directory
+    here = Path(__file__).resolve().parent
     candidates = [
-        preferred,
-        "trans_wheel_robo2_0.xml",
-        "trans_wheel_robo.xml",
+        here / p.name,                  # same folder as this script
+        here / p,                       # relative to this script folder
+        here.parent / p.name,           # one level up
+        here.parent / p,                # one level up + relative
     ]
-    for p in candidates:
-        if os.path.exists(p):
-            return p
-    raise FileNotFoundError(f"Could not find XML. Tried: {candidates}")
 
+    for c in candidates:
+        if c.is_file():
+            return str(c.resolve())
+
+    raise FileNotFoundError(
+        f"Could not find XML '{xml_path}'. Tried:\n" + "\n".join(str(c) for c in candidates)
+    )
 
 class TransformableWheelFlatEnv:
     """
@@ -270,7 +283,7 @@ class TransformableWheelFlatEnv:
         vy = float(self.data.qvel[self.y_index])
 
         forward_reward = vx
-        # sideways_cost = 0.1*(vy**2) / (vx**2 + vy**2 + 1e-8)
+        sideways_cost = 0.03 * (vy ** 2) / (vx ** 2 + vy ** 2 + 1e-8)
 
         # Penalize large torques
         ctrl_cost = 0.0005 * float(np.sum(np.square(action)))
@@ -304,7 +317,7 @@ class TransformableWheelFlatEnv:
         # Encourage all legs to behave similarly
         # leg_sym_cost = 0.2 * float(np.sum((leg_angles - leg_angles.mean())**2))  # try 0.05 to 0.5
 
-        reward = forward_reward - ctrl_cost - leg_extension_cost #- sideways_cost
+        reward = forward_reward - ctrl_cost - leg_extension_cost - sideways_cost
         # print("forward_reward: ",forward_reward)
         # print("leg_extension_cost: ",leg_extension_cost)
 
@@ -550,6 +563,9 @@ def train_ppo(
         "100pct": num_updates - 1,
     }
 
+    ep_return = 0.0
+    ep_x_start = float(env.data.qpos[env.x_index])
+
     for update in range(num_updates):
         obs_buf = np.zeros((rollout_steps, obs_dim), dtype=np.float32)
         actions_buf = np.zeros((rollout_steps, act_dim), dtype=np.float32)
@@ -558,9 +574,8 @@ def train_ppo(
         dones_buf = np.zeros((rollout_steps,), dtype=np.float32)
         values_buf = np.zeros((rollout_steps,), dtype=np.float32)
 
-        ep_return = 0.0
+
         ep_returns = []
-        ep_x_start = float(env.data.qpos[env.x_index])
         ep_x_deltas = []
 
         for t in range(rollout_steps):
@@ -710,7 +725,7 @@ def train_ppo(
 
 def main():
     desired_ctrl_dt = 0.02
-    max_steps = 1000
+    max_steps = 1024
 
     print("Creating TransformableWheelFlatEnv...")
     env = TransformableWheelFlatEnv(
@@ -724,7 +739,7 @@ def main():
     start_time = time.time()
     _params, returns_history, x_delta_history = train_ppo(
         env,
-        total_timesteps=500_000,
+        total_timesteps=10_000,
         rollout_steps=1024,
         gamma=0.99,
         gae_lambda=0.95,
