@@ -1,5 +1,9 @@
 # Transformable Wheel Robot
 
+### DEMO
+<video src="assets/Robot_Climbing_Over_Step.mp4" controls autoplay loop muted playsinline width="700">
+</video>
+
 ## Git Workflow
 
 ### Prerequisites
