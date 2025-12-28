@@ -1,7 +1,7 @@
 # Transformable Wheel Robot
 
 ## DEMO
-<img src="assets/robot_step.gif" alt="Robot climbing over a step" style="width: 100px; max-width: 100%;">
+<img src="assets/robot_step.gif" alt="Robot climbing over a step" style="width: 600px; max-width: 100%;">
 
 
 
