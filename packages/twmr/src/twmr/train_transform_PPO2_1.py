@@ -1,10 +1,18 @@
 
 """
 
-train_transform_flat_PPO.py
+TO RUN: python3 packages/twmr/src/twmr/train_transform_PPO2_1.py
 
-PPO training for transformable leg-wheel robot on a flat plane,
-with trans_wheel_robo2_0.xml:
+Changes: 
+- Has camera that moves with robot
+- can work with following terrains
+      - flat infinite plane
+      - 5 cm step
+      - hilly terrain (generated with script & tunable)
+
+
+PPO training for transformable leg-wheel robot on different surfaces (change the xml_file path),
+with trans_wheel_robo2_2.xml:
   - 8 torque actuators total:
       *4 wheel torque motors
       *4 leg0 extension torque motors
@@ -18,14 +26,21 @@ Reward:
   finishes using a fixed horizon
 
 
-23 seconds per minibatch
+23-31 seconds per minibatch / PPO update
 
 """
+
+# xml_file = "trans_wheel_robo2_2FLAT.xml"
+# xml_file = "trans_wheel_robo2_2BOX.xml"
+xml_file = "trans_wheel_robo2_2GEN_TERR.xml"
+# xml_file = "trans_wheel_robo2_2JAMES_TERR.xml"
+
 
 import os
 import subprocess
 import time
 from typing import Dict, Any, Optional, List
+from pathlib import Path
 
 import numpy as np
 
@@ -62,6 +77,16 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import mujoco
 
+def _find_repo_root() -> Path:
+    here = Path(__file__).resolve()
+    for p in [here.parent, *here.parents]:
+        if (p / "README.md").exists():
+            return p
+    return Path.cwd()
+
+REPO_ROOT = _find_repo_root()
+RESULTS_DIR = REPO_ROOT / "results"
+RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 print("MUJOCO_GL =", os.environ.get("MUJOCO_GL"))
 
@@ -80,7 +105,7 @@ if subprocess.run("nvidia-smi", shell=True).returncode != 0:
 
 
 # ---------------------------------------------------------------------------
-# 1) Environment around trans_wheel_robo2_0.xml
+# 1) Environment around trans_wheel_robo2_2.xml
 # ---------------------------------------------------------------------------
 
 DESIRED_ACTUATORS: List[str] = [
@@ -105,15 +130,31 @@ LEG0_JOINTS: List[str] = [
 
 
 def _resolve_xml_path(preferred: str) -> str:
-    candidates = [
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    names = [
         preferred,
-        "trans_wheel_robo2_0.xml",
+        xml_file,
         "trans_wheel_robo.xml",
     ]
+    candidates = []
+    for name in names:
+        if not name:
+            continue
+        candidates.append(name)
+        if not os.path.isabs(name):
+            candidates.append(os.path.join(base_dir, name))
+
+    seen = set()
+    unique_candidates = []
     for p in candidates:
+        if p not in seen:
+            unique_candidates.append(p)
+            seen.add(p)
+
+    for p in unique_candidates:
         if os.path.exists(p):
             return p
-    raise FileNotFoundError(f"Could not find XML. Tried: {candidates}")
+    raise FileNotFoundError(f"Could not find XML. Tried: {unique_candidates}")
 
 
 class TransformableWheelFlatEnv:
@@ -126,7 +167,7 @@ class TransformableWheelFlatEnv:
 
     def __init__(
         self,
-        xml_path: str = "trans_wheel_robo2_0.xml",
+        xml_path: str = xml_file,
         desired_ctrl_dt: float = 0.02,
         frame_skip: Optional[int] = None,
         max_steps: int = 1000,
@@ -270,7 +311,7 @@ class TransformableWheelFlatEnv:
         vy = float(self.data.qvel[self.y_index])
 
         forward_reward = vx
-        # sideways_cost = 0.1*(vy**2) / (vx**2 + vy**2 + 1e-8)
+        sideways_cost = 0.03 * (vy ** 2) / (vx ** 2 + vy ** 2 + 1e-8)
 
         # Penalize large torques
         ctrl_cost = 0.0005 * float(np.sum(np.square(action)))
@@ -304,7 +345,7 @@ class TransformableWheelFlatEnv:
         # Encourage all legs to behave similarly
         # leg_sym_cost = 0.2 * float(np.sum((leg_angles - leg_angles.mean())**2))  # try 0.05 to 0.5
 
-        reward = forward_reward - ctrl_cost - leg_extension_cost #- sideways_cost
+        reward = forward_reward - ctrl_cost - leg_extension_cost - sideways_cost
         # print("forward_reward: ",forward_reward)
         # print("leg_extension_cost: ",leg_extension_cost)
 
@@ -345,12 +386,40 @@ class TransformableWheelFlatEnv:
 
         renderer = mujoco.Renderer(self.model, height=480, width=640)
 
+        # -----------------------------
+        # FOLLOW CAMERA: isometric view of the FRONT of the robot
+        # -----------------------------
+        cam = mujoco.MjvCamera()
+        if hasattr(mujoco, "mjv_defaultFreeCamera"):
+            mujoco.mjv_defaultFreeCamera(self.model, cam)
+        else:
+            mujoco.mjv_defaultCamera(cam)
+
+        # Isometric-ish: 45° around +z, looking down ~30°.
+        # With lookat tracking the chassis, this gives a consistent "front corner" view
+        # as the robot moves (assuming "front" is roughly +x).
+        cam.azimuth = 135.0
+        cam.elevation = -30.0
+        cam.distance = 0.90
+
+        # Track chassis (fallbacks included)
+        follow_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "chassis")
+        if follow_body_id < 0:
+            follow_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "root")
+        if follow_body_id < 0:
+            follow_body_id = 1  # world=0; use first body as last resort
+
         rng = jax.random.PRNGKey(0)
         if fps is None:
             fps = 1.0 / self.ctrl_dt
 
         while True:
-            renderer.update_scene(self.data)
+            # Move camera target with robot
+            lookat = np.array(self.data.xpos[follow_body_id], dtype=np.float32)
+            lookat[2] += 0.03  # aim slightly above the body center
+            cam.lookat[:] = lookat
+
+            renderer.update_scene(self.data, camera=cam)
             frames.append(renderer.render())
 
             obs_jnp = jnp.asarray(obs[None, :], dtype=jnp.float32)
@@ -363,13 +432,19 @@ class TransformableWheelFlatEnv:
                 break
 
         renderer.close()
-        media.write_video(video_path, frames, fps=fps)
+        video_path_p = Path(video_path)
+        if not video_path_p.is_absolute():
+            video_path_p = RESULTS_DIR / video_path_p
+        video_path_p.parent.mkdir(parents=True, exist_ok=True)
+
+        media.write_video(str(video_path_p), frames, fps=fps)
 
         # compute and return this trial's +x distance
         x_end = float(self.data.qpos[self.x_index])
         x_delta = x_end - x_start
 
-        print(f"Saved video to {video_path} | trial +x distance = {x_delta:.3f} m")
+        print(f"Saved video to {video_path_p} | trial +x distance = {x_delta:.3f} m")
+
         return x_delta
 
 
@@ -436,6 +511,12 @@ def make_policy_value_fn(model, action_scale: jnp.ndarray):
 
 
 def save_trial_x_plot(trial_labels: List[str], trial_x_deltas: List[float], out_path: str = "transform_ppo_trial_x_distance.png"):
+    
+    out_path_p = Path(out_path)
+    if not out_path_p.is_absolute():
+        out_path_p = RESULTS_DIR / out_path_p
+    out_path_p.parent.mkdir(parents=True, exist_ok=True)
+    
     plt.figure(figsize=(7, 4))
     xs = np.arange(len(trial_x_deltas))
     plt.plot(xs, trial_x_deltas, marker="o")
@@ -445,9 +526,9 @@ def save_trial_x_plot(trial_labels: List[str], trial_x_deltas: List[float], out_
     plt.title("+x Distance Traveled per Saved Video Trial")
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig(out_path, dpi=150)
+    plt.savefig(str(out_path_p), dpi=150)
     plt.close()
-    print(f"Updated trial x-distance plot -> {out_path}")
+    print(f"Updated trial x-distance plot -> {out_path_p}")
 
 
 # ---------------------------------------------------------------------------
@@ -550,6 +631,9 @@ def train_ppo(
         "100pct": num_updates - 1,
     }
 
+    ep_return = 0.0
+    ep_x_start = float(env.data.qpos[env.x_index])
+
     for update in range(num_updates):
         obs_buf = np.zeros((rollout_steps, obs_dim), dtype=np.float32)
         actions_buf = np.zeros((rollout_steps, act_dim), dtype=np.float32)
@@ -558,9 +642,8 @@ def train_ppo(
         dones_buf = np.zeros((rollout_steps,), dtype=np.float32)
         values_buf = np.zeros((rollout_steps,), dtype=np.float32)
 
-        ep_return = 0.0
+
         ep_returns = []
-        ep_x_start = float(env.data.qpos[env.x_index])
         ep_x_deltas = []
 
         for t in range(rollout_steps):
@@ -690,7 +773,7 @@ def train_ppo(
     plt.title("PPO Training Progress (Transformable Wheel Robot on Flat Ground)")
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig("transform_ppo_rewards.png", dpi=150)
+    plt.savefig(str(RESULTS_DIR / "transform_ppo_rewards.png"), dpi=150)
     plt.close()
     print("Saved training curve to transform_ppo_rewards.png")
 
@@ -701,7 +784,7 @@ def train_ppo(
     plt.title("Distance Traveled in +x per PPO Update")
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig("transform_ppo_x_distance.png", dpi=150)
+    plt.savefig(str(RESULTS_DIR / "transform_ppo_x_distance.png"), dpi=150)
     plt.close()
     print("Saved +x distance curve to transform_ppo_x_distance.png")
 
@@ -710,11 +793,11 @@ def train_ppo(
 
 def main():
     desired_ctrl_dt = 0.02
-    max_steps = 1000
+    max_steps = 1024
 
     print("Creating TransformableWheelFlatEnv...")
     env = TransformableWheelFlatEnv(
-        xml_path="trans_wheel_robo2_0.xml",
+        xml_path=xml_file,
         desired_ctrl_dt=desired_ctrl_dt,
         frame_skip=None,
         max_steps=max_steps,
@@ -724,7 +807,7 @@ def main():
     start_time = time.time()
     _params, returns_history, x_delta_history = train_ppo(
         env,
-        total_timesteps=500_000,
+        total_timesteps=1_200_000,
         rollout_steps=1024,
         gamma=0.99,
         gae_lambda=0.95,
