@@ -1,5 +1,18 @@
-#adapted from leapcube orient
-"""Train a PPO agent using JAX on the Transformable Wheel Robot."""
+# Copyright 2025 DeepMind Technologies Limited
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+"""Train a PPO agent using JAX on the specified environment."""
 
 import datetime
 import functools
@@ -46,16 +59,20 @@ os.environ["MUJOCO_GL"] = "egl"
 logging.set_verbosity(logging.WARNING)
 
 # Suppress warnings
+
+# Suppress RuntimeWarnings from JAX
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="jax")
+# Suppress DeprecationWarnings from JAX
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="jax")
+# Suppress UserWarnings from absl (used by JAX and TensorFlow)
 warnings.filterwarnings("ignore", category=UserWarning, module="absl")
+
 
 _ENV_NAME = flags.DEFINE_string(
     "env_name",
     "TransformableWheelMobileRobot",
-    f"Name of the environment.",
+    f"Name of the environment. One of {', '.join(registry.ALL_ENVS)}",
 )
-
 _IMPL = flags.DEFINE_enum("impl", "jax", ["jax", "warp"], "MJX implementation")
 _PLAYGROUND_CONFIG_OVERRIDES = flags.DEFINE_string(
     "playground_config_overrides",
@@ -83,7 +100,7 @@ _DOMAIN_RANDOMIZATION = flags.DEFINE_boolean(
 )
 _SEED = flags.DEFINE_integer("seed", 1, "Random seed")
 _NUM_TIMESTEPS = flags.DEFINE_integer(
-    "num_timesteps", 50_000_000, "Number of timesteps" #increased
+    "num_timesteps", 200_000, "Number of timesteps" #CHANGED
 )
 _NUM_VIDEOS = flags.DEFINE_integer(
     "num_videos", 1, "Number of videos to record after training."
@@ -95,33 +112,33 @@ _NORMALIZE_OBSERVATIONS = flags.DEFINE_boolean(
     "normalize_observations", True, "Normalize observations"
 )
 _ACTION_REPEAT = flags.DEFINE_integer("action_repeat", 1, "Action repeat")
-_UNROLL_LENGTH = flags.DEFINE_integer("unroll_length", 20, "Unroll length") #increased for stability
+_UNROLL_LENGTH = flags.DEFINE_integer("unroll_length", 10, "Unroll length")
 _NUM_MINIBATCHES = flags.DEFINE_integer(
-    "num_minibatches", 32, "Number of minibatches"
+    "num_minibatches", 8, "Number of minibatches"
 )
 _NUM_UPDATES_PER_BATCH = flags.DEFINE_integer(
-    "num_updates_per_batch", 4, "Number of updates per batch"
+    "num_updates_per_batch", 8, "Number of updates per batch"
 )
-_DISCOUNTING = flags.DEFINE_float("discounting", 0.97, "Discounting")
-_LEARNING_RATE = flags.DEFINE_float("learning_rate", 3e-4, "Learning rate")
-_ENTROPY_COST = flags.DEFINE_float("entropy_cost", 1e-3, "Entropy cost")
-_NUM_ENVS = flags.DEFINE_integer("num_envs", 2048, "Number of environments") #more parallel robots
+_DISCOUNTING = flags.DEFINE_float("discounting", 0.99, "Discounting")
+_LEARNING_RATE = flags.DEFINE_float("learning_rate", 2e-4, "Learning rate") #CHANGED
+_ENTROPY_COST = flags.DEFINE_float("entropy_cost", 5e-3, "Entropy cost")
+_NUM_ENVS = flags.DEFINE_integer("num_envs", 16, "Number of environments") #lowered to test run
 _NUM_EVAL_ENVS = flags.DEFINE_integer(
-    "num_eval_envs", 128, "Number of evaluation environments"
+    "num_eval_envs", 4, "Number of evaluation environments" #lowered to test run
 )
-_BATCH_SIZE = flags.DEFINE_integer("batch_size", 1024, "Batch size") # needs to be divisible by minibatches
+_BATCH_SIZE = flags.DEFINE_integer("batch_size", 16, "Batch size") #lowered to test run
 _MAX_GRAD_NORM = flags.DEFINE_float("max_grad_norm", 1.0, "Max grad norm")
 _CLIPPING_EPSILON = flags.DEFINE_float(
     "clipping_epsilon", 0.2, "Clipping epsilon for PPO"
 )
 _POLICY_HIDDEN_LAYER_SIZES = flags.DEFINE_list(
     "policy_hidden_layer_sizes",
-    [256, 256, 256], #increased network size for complex robot
+    [64, 64, 64],
     "Policy hidden layer sizes",
 )
 _VALUE_HIDDEN_LAYER_SIZES = flags.DEFINE_list(
     "value_hidden_layer_sizes",
-    [256, 256, 256],
+    [64, 64, 64],
     "Value hidden layer sizes",
 )
 _POLICY_OBS_KEY = flags.DEFINE_string(
@@ -156,13 +173,8 @@ _TRAINING_METRICS_STEPS = flags.DEFINE_integer(
     " experiences slowdown.",
 )
 
-def get_rl_config(env_name: str) -> config_dict.ConfigDict:
-  if env_name == "TransformableWheelMobileRobot":
-      cfg = locomotion_params.brax_ppo_config(env_name, _IMPL.value)
-      cfg.num_timesteps = 50_000_000
-      cfg.num_envs = 2048
-      return cfg
 
+def get_rl_config(env_name: str) -> config_dict.ConfigDict:
   if env_name in mujoco_playground.manipulation._envs:
     if _VISION.value:
       return manipulation_params.brax_vision_ppo_config(env_name, _IMPL.value)
@@ -174,7 +186,7 @@ def get_rl_config(env_name: str) -> config_dict.ConfigDict:
       return dm_control_suite_params.brax_vision_ppo_config(
           env_name, _IMPL.value
       )
-    return dm_control_suite_params.brax_ppo_config(env_name, _IMPL.value)
+    return dm_control_suite_params.brax_ppo_config(env_name) #removed IMPL.value bc only 1 positional arg taken
 
   raise ValueError(f"Env {env_name} not found in {registry.ALL_ENVS}.")
 
@@ -208,7 +220,6 @@ def main(argv):
 
   ppo_params = get_rl_config(_ENV_NAME.value)
 
-  # Override PPO params with flags if present
   if _NUM_TIMESTEPS.present:
     ppo_params.num_timesteps = _NUM_TIMESTEPS.value
   if _PLAY_ONLY.present:
@@ -263,12 +274,9 @@ def main(argv):
   env_cfg_overrides = {}
   if _PLAYGROUND_CONFIG_OVERRIDES.value is not None:
     env_cfg_overrides = json.loads(_PLAYGROUND_CONFIG_OVERRIDES.value)
-  
-  # Load the environment
   env = registry.load(
       _ENV_NAME.value, config=env_cfg, config_overrides=env_cfg_overrides
   )
-  
   if _RUN_EVALS.present:
     ppo_params.run_evals = _RUN_EVALS.value
   if _LOG_TRAINING_METRICS.present:
@@ -294,7 +302,7 @@ def main(argv):
   logdir.mkdir(parents=True, exist_ok=True)
   print(f"Logs are being stored in: {logdir}")
 
-  # Initialize Weights & Biases
+  # Initialize Weights & Biases if required
   if _USE_WANDB.value and not _PLAY_ONLY.value:
     if wandb is None:
       raise ImportError(
@@ -305,12 +313,13 @@ def main(argv):
     wandb.config.update(env_cfg.to_dict())
     wandb.config.update({"env_name": _ENV_NAME.value})
 
-  # Initialize TensorBoard
+  # Initialize TensorBoard if required
   if _USE_TB.value and not _PLAY_ONLY.value:
     writer = tensorboardX.SummaryWriter(logdir)
 
   # Handle checkpoint loading
   if _LOAD_CHECKPOINT_PATH.value is not None:
+    # Convert to absolute path
     ckpt_path = epath.Path(_LOAD_CHECKPOINT_PATH.value).resolve()
     if ckpt_path.is_dir():
       latest_ckpts = list(ckpt_path.glob("*"))
@@ -351,7 +360,6 @@ def main(argv):
   else:
     network_factory = network_fn
 
-  # Enable Domain Randomization if flagged
   if _DOMAIN_RANDOMIZATION.value:
     training_params["randomization_fn"] = registry.get_domain_randomizer(
         _ENV_NAME.value
@@ -376,7 +384,6 @@ def main(argv):
   if "num_eval_envs" in training_params:
     del training_params["num_eval_envs"]
 
-  # START TRAINING
   train_fn = functools.partial(
       ppo.train,
       **training_params,
@@ -390,13 +397,15 @@ def main(argv):
 
   times = [time.monotonic()]
 
-  # Progress function
+  # Progress function for logging
   def progress(num_steps, metrics):
     times.append(time.monotonic())
 
+    # Log to Weights & Biases
     if _USE_WANDB.value and not _PLAY_ONLY.value:
       wandb.log(metrics, step=num_steps)
 
+    # Log to TensorBoard
     if _USE_TB.value and not _PLAY_ONLY.value:
       for key, value in metrics.items():
         writer.add_scalar(key, value, num_steps)
@@ -464,73 +473,6 @@ def main(argv):
   if len(times) > 1:
     print(f"Time to JIT compile: {times[1] - times[0]}")
     print(f"Time to train: {times[-1] - times[1]}")
-
-  print("Starting inference...")
-
-  # Create inference function.
-  inference_fn = make_inference_fn(params, deterministic=True)
-  jit_inference_fn = jax.jit(inference_fn)
-
-  # Run evaluation rollouts.
-  def do_rollout(rng, state):
-    empty_data = state.data.__class__(
-        **{k: None for k in state.data.__annotations__}
-    )
-    empty_traj = state.__class__(**{k: None for k in state.__annotations__})
-    empty_traj = empty_traj.replace(data=empty_data)
-
-    def step(carry, _):
-      state, rng = carry
-      rng, act_key = jax.random.split(rng)
-      act = jit_inference_fn(state.obs, act_key)[0]
-      state = eval_env.step(state, act)
-      traj_data = empty_traj.tree_replace({
-          "data.qpos": state.data.qpos,
-          "data.qvel": state.data.qvel,
-          "data.time": state.data.time,
-          "data.ctrl": state.data.ctrl,
-          "data.mocap_pos": state.data.mocap_pos,
-          "data.mocap_quat": state.data.mocap_quat,
-          "data.xfrc_applied": state.data.xfrc_applied,
-      })
-      if _VISION.value:
-        traj_data = jax.tree_util.tree_map(lambda x: x[0], traj_data)
-      return (state, rng), traj_data
-
-    _, traj = jax.lax.scan(
-        step, (state, rng), None, length=_EPISODE_LENGTH.value
-    )
-    return traj
-
-  rng = jax.random.split(jax.random.PRNGKey(_SEED.value), _NUM_VIDEOS.value)
-  reset_states = jax.jit(jax.vmap(eval_env.reset))(rng)
-  if _VISION.value:
-    reset_states = jax.tree_util.tree_map(lambda x: x[0], reset_states)
-  traj_stacked = jax.jit(jax.vmap(do_rollout))(rng, reset_states)
-  trajectories = [None] * _NUM_VIDEOS.value
-  for i in range(_NUM_VIDEOS.value):
-    t = jax.tree.map(lambda x, i=i: x[i], traj_stacked)
-    trajectories[i] = [
-        jax.tree.map(lambda x, j=j: x[j], t)
-        for j in range(_EPISODE_LENGTH.value)
-    ]
-
-  # Render and save the rollout.
-  render_every = 2
-  fps = 1.0 / eval_env.dt / render_every
-  print(f"FPS for rendering: {fps}")
-  scene_option = mujoco.MjvOption()
-  scene_option.flags[mujoco.mjtVisFlag.mjVIS_TRANSPARENT] = False
-  scene_option.flags[mujoco.mjtVisFlag.mjVIS_PERTFORCE] = False
-  scene_option.flags[mujoco.mjtVisFlag.mjVIS_CONTACTFORCE] = False
-  for i, rollout in enumerate(trajectories):
-    traj = rollout[::render_every]
-    frames = eval_env.render(
-        traj, height=480, width=640, scene_option=scene_option
-    )
-    media.write_video(f"rollout{i}.mp4", frames, fps=fps)
-    print(f"Rollout video saved as 'rollout{i}.mp4'.")
-
 
 def run():
   """Entry point for uv/pip script."""
