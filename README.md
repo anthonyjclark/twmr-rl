@@ -1,9 +1,5 @@
 # Transformable Wheel Robot
 
-## Notes
-
-* Using cylinders for wheels causes the warp backend to crash without an error message.
-
 ## DEMO
 
 <img src="assets/robot_step.gif" alt="Robot climbing over a step" style="width: 400px; max-width: 100%;">
@@ -124,4 +120,17 @@ source .venv/bin/activate
 python -m ipykernel install --name mp --display-name "MuJoCo Playground" --user
 
 # Now you're ready to go!
+```
+
+### Upgrading a Dependency
+
+We'll occasionally get `Failed to fetch` errors because an older version of a pinned depenency is no longer available (2026-02-04: this happened with our MuJoCo dependency). This is someone hard to debug because some people will still be able to install the dependency from cache.
+
+```bash
+# Recreate the dependency error by ignoring cache
+pixi run uv --no-cache sync --upgrade-package mujoco
+
+# Upgrade the dependency
+pixi run uv sync --upgrade-package mujoco
+git add 
 ```
