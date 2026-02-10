@@ -11,6 +11,7 @@ resolution-markers = [
 members = [
     "transformable-leg-wheel-robot",
     "twmr",
+    "wmr",
 ]
 
 [[package]]
@@ -2173,6 +2174,7 @@ dependencies = [
     { name = "playground" },
     { name = "twmr" },
     { name = "warp-lang" },
+    { name = "wmr" },
 ]
 
 [package.metadata]
@@ -2182,6 +2184,7 @@ requires-dist = [
     { name = "playground", git = "https://github.com/google-deepmind/mujoco_playground.git" },
     { name = "twmr", editable = "packages/twmr" },
     { name = "warp-lang", specifier = ">=1.10.1", index = "https://pypi.nvidia.com/" },
+    { name = "wmr", editable = "packages/wmr" },
 ]
 
 [[package]]
@@ -2256,6 +2259,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/45/ea/b0f8eeb287f8df906
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2f/f9/9e082990c2585c744734f85bec79b5dae5df9c974ffee58fe421652c8e91/werkzeug-3.1.4-py3-none-any.whl", hash = "sha256:2ad50fb9ed09cc3af22c54698351027ace879a0b60a3b5edf5730b2f7d876905", size = 224960, upload-time = "2025-11-29T02:15:21.13Z" },
 ]
+
+[[package]]
+name = "wmr"
+version = "0.1.0"
+source = { editable = "packages/wmr" }
 
 [[package]]
 name = "zipp"

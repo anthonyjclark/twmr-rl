@@ -7,11 +7,15 @@ dependencies = [
     "warp-lang>=1.10.1",
     "playground@git+https://github.com/google-deepmind/mujoco_playground.git#egg=1bd244fa9c51fa7074c7a449934f556d898f7a15",
     "twmr",
+    "wmr",
     "ipykernel>=7.1.0",
 ]
 
 [tool.uv.workspace]
-members = [ "packages/twmr" ]
+members = [
+ "packages/twmr",
+ "packages/wmr",
+]
 
 [[tool.uv.index]]
 name = "mujoco"
@@ -28,6 +32,7 @@ mujoco = { index = "mujoco" }
 warp-lang = { index = "nvidia" }
 mujoco-mjx = { git = "https://github.com/google-deepmind/mujoco", rev = "main", subdirectory = "mjx" }
 twmr = { workspace = true }
+wmr = { workspace = true }
 
 [tool.ruff]
 line-length = 96

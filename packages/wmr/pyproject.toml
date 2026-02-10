@@ -1,0 +1,17 @@
+[project]
+name = "wmr"
+version = "0.1.0"
+description = "Wheeled mobile robot environment."
+readme = "README.md"
+authors = [
+    { name = "anthonyjclark", email = "anthonyjclark@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+wmr = "wmr:main"
+
+[build-system]
+requires = ["uv_build>=0.9.18,<0.10.0"]
+build-backend = "uv_build"
