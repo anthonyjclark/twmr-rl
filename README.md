@@ -67,14 +67,14 @@ pixi run uv pip install "git+https://github.com/google-deepmind/mujoco_playgroun
 
 </details>
 
-### Setup From Clone
+### Initial Fork and Clone Process
 
 This is the process you should use when you clone the repository for the first time on a new machine (i.e., the HPC/OnDemand).
 
 ```bash
-# 1. Clone the repository
+# 1. Fork and clone the main repository (say yes to cloning)
 cd to/a/resonable/directory
-gh repo clone anthonyjclark/twmr-rl
+gh repo fork anthonyjclark/twmr-rl
 
 # 2. Setup the project
 cd twmr-rl
@@ -85,12 +85,26 @@ python -m ipykernel install --name mp --display-name "MuJoCo Playground" --user
 
 Now you're ready to go!
 
+### Subsequent Cloning Process
+
+If you've already forked the main repository (`anthonyjclark/twmr-rl`) and just want to clone it on a new machine, you should not fork.
+
+```bash
+# 1. Clone your forked repository (say yes to cloning)
+cd to/a/resonable/directory
+gh repo clone YOUR_USERNAME/twmr-rl
+
+# 2. Setup the project (same as the instructions for "Initial Fork and Clone Process")
+```
+
 ### Pull Request Workflow
 
 I recommend creating a branch when you are working on a large change (a new feature, a bug fix, etc).
 This keeps your changes isolated from the main branch that we all use until they are well tested and ready to be merged in.
+For smaller changes, you can just commit directly to your main branch and then open a pull request from your main branch to the main branch of the main repository.
 
-You can use the command line to create a branch, commit your changes, and push the branch to your forked repository. You can also use the VSCode interface if you prefer.
+You can use the command line to create a branch, commit your changes, and push the branch to your forked repository.
+You can also use the VSCode interface if you prefer.
 
 ```bash
 # 1. Create and switch to a new branch named
@@ -106,6 +120,8 @@ git push -u origin feat/SHORT-DESCRIPTIVE-NAME
 # Continue working on the feature branch until ready to merge
 # Open a Pull Request (PR) on GitHub targeting main and then send a message to have it reviewed
 # https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request
+#
+# Alternatively, you can use the gh cli to create a pull request from the command line: https://cli.github.com/manual/gh_pr_create
 ```
 
 ### Upgrading a Dependency
